@@ -26,18 +26,25 @@ class Node:
         return self.data['City']
 
     def roulette_wheel(self, visited_edges, start_node):
-        con = sqlite3.connect(db_name)
-        c = con.cursor()
+        # TODO: REMOVE
+        return random.sample(self.edges,1)[0]
 
-        visited_nodes = c.execute("SELECT * FROM edges WHERE id in ({0})".format(', '.join('?' for _ in visited_edges)), visited_edges).fetchall()
-        connected_edges = c.execute("SELECT id FROM edges WHERE from_node=?", (self.id,)).fetchall()
-        import pdb;pdb.set_trace()
+        visited_nodes = [edge.to_node for edge in visited_edges]
+        viable_edges = [edge for edge in self.edges if not edge.to_node in visited_nodes and edge.to_node != start_node]
 
-        viable_edges = [edge for edge in connected_edges if not edge]
+        if not viable_edges:
+            viable_edges = [edge for edge in self.edges]
 
-
-        con.close()
-        return edge_id
+        all_pheromones = sum([edge.pheromones for edge in viable_edges])
+        num = random.uniform(0,all_pheromones)
+        s = 0
+        i = 0
+        selected_edge = viable_edges[i]
+        while(s<=num):
+            selected_edge = viable_edges[i]
+            s += selected_edge.pheromones
+            i += 1
+        return selected_edge
 
     def get_dict(self):
         return self.data
@@ -69,11 +76,14 @@ def get_cities(filename):
     print("Fetched nodes, attempting to find duplicates...")
     unique_nodes = []
     new_coords   = []
-    for i,node in enumerate(nodes[:]):
+    new_names    = []
+    for i,node in enumerate(nodes):
         coords = (node.lat, node.lon)
+        name = node.city
         if coords not in new_coords:
             unique_nodes.append(node)
             new_coords.append(coords)
+
     print("Removed",len(nodes)-len(unique_nodes),"duplicates...")
     for i, node in enumerate(unique_nodes):
         node.id = i
@@ -95,63 +105,107 @@ def calculate_distance(node1, node2):
     return rad * c
 
 def generate_edges(nodes):
-    print("Generating edges for",len(nodes),"nodes...")
+    print("Generating edges for",len(nodes),"nodes... ("+str(len(nodes)**2-len(nodes))+")")
     edges = []
     for i,a in enumerate(nodes):
         for j,b in enumerate(nodes):
-            if a != b:
-                edges.append((i, j, calculate_distance(a, b), 1))
-        print('Generated edges for node index',i)
+            if i != j:
+                edges.append(Edge(a, b, calculate_distance(a,b)))
     return edges
+
+def get_sum(edges):
+    return sum(e.cost for e in edges)
 
 class ANT:
     def __init__(self):
         self.visited_edges = []
 
-    def check_if_done(self):
-        """con = sqlite3.connect(db_name)
-        c = con.cursor()
-        c.execute("select * from edges where id=?", (self.visited_edges[-1]))
-        print (c.fetchone())
-        con.commit()
-        con.close()"""
-        return len(self.visited_edges) > 10
+    def check_if_done(self, end_node):
+        try:
+            arrived = self.visited_edges[-1].to_node == end_node
+        except IndexError:
+            arrived = False
+        return len(self.visited_edges) >= 10 and arrived
 
 
-    def walk(self, start_node):
-        print("Ant starting his walk...")
+    def walk(self, start_node, end_node):
         current_node = start_node
-        current_edge_id = None
-        while not self.check_if_done():
-            current_edge_id = current_node.roulette_wheel(self.visited_edges, start_node)
-            edge = db.get_edge_by_id(current_edge_id)
-            current_node = nodes[int(edge[2])]
-            self.visited_edges.append(current_edge_id)
-        print(self.visited_edges)
+        current_edge = None
+        while not self.check_if_done(end_node):
+            current_edge = current_node.roulette_wheel(self.visited_edges, start_node)
+            current_node = current_edge.to_node
+            self.visited_edges.append(current_edge)
 
-    # TODO: update pheromones to work with database
     def pheromones(self):
-        currentCost = getSum(self.visitedEdges)
-        if(currentCose < MAXCOST):
-            score = 1000**(1-float(currentCost)/MAXCOST)
-            for edge in self.visitedEdges:
+        current_cost = get_sum(self.visited_edges)
+        if(current_cost < MAXCOST):
+            score = 1000**(1-float(current_cost)/MAXCOST)
+            for edge in self.visited_edges:
                 edge.pheromones += score
 
+    def gps_stuff(self):
+        gps_nodes = [edge.to_node for edge in self.visited_edges]
+        gps_nodes.insert(0,self.visited_edges[0].from_node)
+        for node in gps_nodes:
+            print(node.city+','+node.country+','+node.lat+','+node.lon)
 
 if __name__ == '__main__':
     start_main = time.time()
     print("Started execution...")
     city_file = 'worldcitiespop.txt'
 
+    # Fetching nodes
     nodes = get_cities(city_file)
+    random.shuffle(nodes)
+    # Not using all cities cause slow
+    nodes = nodes[:100]
+
+
+    print("Generating edges...")
     edges = generate_edges(nodes)
 
-    with open('edges.json','w') as fp:
-        json.dump(edges, fp)
+    print("Assigning edges to nodes...")
+    for edge in edges:
+        for node in nodes:
+            if(edge.from_node==node):
+                node.edges.append(edge)
 
-    #ant = ANT()
-    #ant.walk(nodes[0])
+    print("Calculating MAXCOST...")
+    MAXCOST = get_sum(edges)
 
 
+    fastest_ant = (-1, -1, -1)
+    slowest_ant = (-1, -1, -1)
+
+    START_POINT = nodes[0]
+    END_POINT = nodes[23]
+    print("Starting the walking...")
+    done_ants = []
+    for i in range(1000000):
+        ant = ANT()
+        ant.walk(START_POINT, END_POINT)
+        ant.pheromones()
+        ant_cost = get_sum(ant.visited_edges)
+        if(ant_cost < fastest_ant[1] or fastest_ant[1] == -1):
+            fastest_ant = (i, ant_cost, len(ant.visited_edges))
+            print("NEW FAST RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
+
+        if(ant_cost > slowest_ant[1] or slowest_ant[1] == -1):
+            slowest_ant = (i, ant_cost, len(ant.visited_edges))
+            print("NEW SLOW RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
+        done_ants.append(ant)
+
+        # print (i, get_sum(ant.visited_edges))
+    print("STARTING AT:",START_POINT)
+    print("ENDING AT  :",END_POINT)
+    print("The fastest ant was ant",fastest_ant[0],"with cost of",fastest_ant[1], "he visited",fastest_ant[2],"edges...")
+    print("The slowest ant was ant",slowest_ant[0],"with cost of",slowest_ant[1], "he visited",slowest_ant[2],"edges...")
+
+    done_ants[fastest_ant[0]].gps_stuff()
+
+    ant = ANT()
+    ant.walk(START_POINT, END_POINT)
+    #for edge in ant.visited_edges:
+        #pass#print(edge,edge.pheromones)
 
     print("Main script executed in " + "{0:.2f}".format(time.time() - start_main) + ' seconds...')

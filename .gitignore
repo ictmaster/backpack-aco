@@ -1,6 +1,8 @@
 # Project specific
 worldcitiespop.txt
 *.db
+edges.json
+backup/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
