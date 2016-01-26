@@ -96,16 +96,13 @@ def calculate_distance(node1, node2):
 
 def generate_edges(nodes):
     print("Generating edges for",len(nodes),"nodes...")
-    con = sqlite3.connect(db_name)
-    c = con.cursor()
+    edges = []
     for i,a in enumerate(nodes):
         for j,b in enumerate(nodes):
             if a != b:
-                c.execute('insert into edges (from_node, to_node, cost, pheromones) values (?, ?, ?, ?)', (i, j, str(calculate_distance(a, b)), 1))
-        con.commit()
-        print('Committed edges from',i,'to db...')
-    con.commit()
-    con.close()
+                edges.append((i, j, calculate_distance(a, b), 1))
+        print('Generated edges for node index',i)
+    return edges
 
 class ANT:
     def __init__(self):
@@ -147,7 +144,11 @@ if __name__ == '__main__':
     city_file = 'worldcitiespop.txt'
 
     nodes = get_cities(city_file)
-    generate_edges(nodes)
+    edges = generate_edges(nodes)
+
+    with open('edges.json','w') as fp:
+        json.dump(edges, fp)
+
     #ant = ANT()
     #ant.walk(nodes[0])
 
