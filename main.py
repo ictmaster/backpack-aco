@@ -26,6 +26,7 @@ class Node:
         return self.data['City']
 
     def roulette_wheel(self, visited_edges, start_node):
+
         con = sqlite3.connect(db_name)
         c = con.cursor()
         print("roulette...")
@@ -33,11 +34,9 @@ class Node:
         SELECT id
         FROM edges
         WHERE from_node = ?
-        LIMIT 1
-        OFFSET 1;
+        LIMIT 1;
         """,(self.id,))
         edge_id = c.fetchone()[0]
-        con.commit()
         con.close()
         return edge_id
 
@@ -101,9 +100,9 @@ def generate_edges(nodes):
     con = sqlite3.connect(db_name)
     c = con.cursor()
     for i,a in enumerate(nodes):
-        for j,b in enumerate(nodes[nodes.index(a)+1:]):
+        for j,b in enumerate(nodes):
             if a != b:
-                c.execute('insert into edges (from_node, to_node, cost, pheromones) values (?, ?, ?, ?)', (nodes.index(a), nodes.index(b), str(calculate_distance(a, b)), 1))
+                c.execute('insert into edges (from_node, to_node, cost, pheromones) values (?, ?, ?, ?)', (i, j, str(calculate_distance(a, b)), 1))
         con.commit()
         print('Committed edges from',i,'to db...')
     con.commit()
@@ -130,7 +129,6 @@ class ANT:
         while not self.check_if_done():
             current_edge_id = current_node.roulette_wheel(self.visited_edges, start_node)
             edge = db.get_edge_by_id(current_edge_id)
-            import pdb;pdb.set_trace()
             current_node = nodes[int(edge[2])]
             self.visited_edges.append(current_edge_id)
         print(self.visited_edges)
@@ -150,9 +148,9 @@ if __name__ == '__main__':
     city_file = 'worldcitiespop.txt'
 
     nodes = get_cities(city_file)
-    generate_edges(nodes)
-    #ant = ANT()
-    #ant.walk(nodes[0])
+    #generate_edges(nodes)
+    ant = ANT()
+    ant.walk(nodes[0])
 
 
 
