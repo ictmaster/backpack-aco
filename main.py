@@ -26,17 +26,16 @@ class Node:
         return self.data['City']
 
     def roulette_wheel(self, visited_edges, start_node):
-
         con = sqlite3.connect(db_name)
         c = con.cursor()
-        print("roulette...")
-        c.execute("""
-        SELECT id
-        FROM edges
-        WHERE from_node = ?
-        LIMIT 1;
-        """,(self.id,))
-        edge_id = c.fetchone()[0]
+
+        visited_nodes = c.execute("SELECT * FROM edges WHERE id in ({0})".format(', '.join('?' for _ in visited_edges)), visited_edges).fetchall()
+        connected_edges = c.execute("SELECT id FROM edges WHERE from_node=?", (self.id,)).fetchall()
+        import pdb;pdb.set_trace()
+
+        viable_edges = [edge for edge in connected_edges if not edge]
+
+
         con.close()
         return edge_id
 
@@ -148,9 +147,9 @@ if __name__ == '__main__':
     city_file = 'worldcitiespop.txt'
 
     nodes = get_cities(city_file)
-    #generate_edges(nodes)
-    ant = ANT()
-    ant.walk(nodes[0])
+    generate_edges(nodes)
+    #ant = ANT()
+    #ant.walk(nodes[0])
 
 
 
