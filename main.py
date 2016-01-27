@@ -5,7 +5,8 @@ import time
 import debug
 import json
 import math
-import sqlite3
+MAXPHEROMONES = 100000
+MINPHEROMONES = 1
 
 class Node:
     def __init__(self, data_dict):
@@ -49,7 +50,13 @@ class Edge:
         self.from_node = from_node
         self.to_node = to_node
         self.cost = cost
-        self.pheromones = 1
+        self.pheromones = MAXPHEROMONES
+
+    def check_pheromones(self):
+        if(self.pheromones>MAXPHEROMONES):
+            self.pheromones = MAXPHEROMONES
+        if(self.pheromones<MINPHEROMONES):
+            self.pheromones = MINPHEROMONES
 
     def __repr__(self):
         return str(self.from_node) + " >--[" + str(self.cost) + "]--> " + str(self.to_node)
@@ -84,7 +91,7 @@ def get_cities(filename):
         node.id = i
     return unique_nodes
 
-def calculate_distance(node1, node2):
+def calculate_cost(node1, node2):
     lat1, lat2 = float(node1.lat), float(node2.lat)
     lon1, lon2 = float(node1.lon), float(node2.lon)
 
@@ -97,7 +104,7 @@ def calculate_distance(node1, node2):
     a = (math.sin(d_phi / 2) ** 2) + (math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda) ** 2)
     c = 2*math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-    return rad * c
+    return (rad * c)/10000
 
 def generate_edges(nodes):
     print("Generating edges for",len(nodes),"nodes... ("+str(len(nodes)**2-len(nodes))+")")
@@ -105,7 +112,7 @@ def generate_edges(nodes):
     for i,a in enumerate(nodes):
         for j,b in enumerate(nodes):
             if i != j:
-                edges.append(Edge(a, b, calculate_distance(a,b)))
+                edges.append(Edge(a, b, calculate_cost(a,b)))
     return edges
 
 def get_sum(edges):
@@ -135,7 +142,12 @@ class ANT:
         current_cost = get_sum(self.visited_edges)
         if(current_cost < MAXCOST):
             score = 1000**(1-float(current_cost)/MAXCOST)
-            for edge in self.visited_edges:
+            global best_score
+            global best_edges
+            if(score>best_score):
+                best_score = score
+                best_edges = self.visited_edges
+            for edge in best_edges:
                 edge.pheromones += score
 
     def gps_stuff(self):
@@ -143,6 +155,14 @@ class ANT:
         gps_nodes.insert(0,self.visited_edges[0].from_node)
         for node in gps_nodes:
             print(node.city+','+node.country+','+node.lat+','+node.lon+','+'red')
+
+def evaporate(edges):
+    for edge in edges:
+        edge.pheromones *= 0.99
+
+def check_all_edges(edges):
+    for edge in edges:
+        edge.check_pheromones()
 
 def print_nodes(nodes):
     for node in nodes:
@@ -157,7 +177,7 @@ if __name__ == '__main__':
     nodes = get_cities(city_file)
     random.shuffle(nodes)
     # Not using all cities cause slow
-    nodes = nodes[:15]
+    nodes = nodes[:100]
 
 
     print("Generating edges...")
@@ -171,6 +191,8 @@ if __name__ == '__main__':
 
     print("Calculating MAXCOST...")
     MAXCOST = get_sum(edges)
+    best_score = 0
+    bestSolution = []
 
 
     fastest_ant = (-1, -1, -1)
@@ -180,18 +202,23 @@ if __name__ == '__main__':
     END_POINT = nodes[4]
     print("Starting the walking...")
     done_ants = []
-    for i in range(100000):
+    every_cost = []
+    for i in range(1000):
+        evaporate(edges)
         ant = ANT()
         ant.walk(START_POINT, END_POINT)
         ant.pheromones()
+        check_all_edges(edges)
         ant_cost = get_sum(ant.visited_edges)
+        every_cost.append(ant_cost)
+
         if(ant_cost < fastest_ant[1] or fastest_ant[1] == -1):
             fastest_ant = (i, ant_cost, len(ant.visited_edges))
-            print("NEW FAST RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
+            #print("NEW FAST RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
 
         if(ant_cost > slowest_ant[1] or slowest_ant[1] == -1):
             slowest_ant = (i, ant_cost, len(ant.visited_edges))
-            print("NEW SLOW RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
+            #print("NEW SLOW RECORD:",ant_cost, ", VISITED:",len(ant.visited_edges),", ANT NUMBER:",i)
         done_ants.append(ant)
 
         # print (i, get_sum(ant.visited_edges))
@@ -200,8 +227,12 @@ if __name__ == '__main__':
     print("The fastest ant was ant",fastest_ant[0],"with cost of",fastest_ant[1], "he visited",fastest_ant[2],"edges...")
     print("The slowest ant was ant",slowest_ant[0],"with cost of",slowest_ant[1], "he visited",slowest_ant[2],"edges...")
 
-    print_nodes(nodes)
-    done_ants[fastest_ant[0]].gps_stuff()
+    with open('result.txt', 'w') as fp:
+        for c in every_cost:
+            fp.write(str(int(c))+"\n")
+
+    #print_nodes(nodes)
+    #done_ants[fastest_ant[0]].gps_stuff()
 
     ant = ANT()
     ant.walk(START_POINT, END_POINT)
