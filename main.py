@@ -6,8 +6,6 @@ import debug
 import json
 import math
 import sqlite3
-from db import db_name
-import db
 
 class Node:
     def __init__(self, data_dict):
@@ -26,9 +24,6 @@ class Node:
         return self.data['City']
 
     def roulette_wheel(self, visited_edges, start_node):
-        # TODO: REMOVE
-        return random.sample(self.edges,1)[0]
-
         visited_nodes = [edge.to_node for edge in visited_edges]
         viable_edges = [edge for edge in self.edges if not edge.to_node in visited_nodes and edge.to_node != start_node]
 
@@ -147,7 +142,11 @@ class ANT:
         gps_nodes = [edge.to_node for edge in self.visited_edges]
         gps_nodes.insert(0,self.visited_edges[0].from_node)
         for node in gps_nodes:
-            print(node.city+','+node.country+','+node.lat+','+node.lon)
+            print(node.city+','+node.country+','+node.lat+','+node.lon+','+'red')
+
+def print_nodes(nodes):
+    for node in nodes:
+        print(node.city+','+node.country+','+node.lat+','+node.lon+','+'blue')
 
 if __name__ == '__main__':
     start_main = time.time()
@@ -158,7 +157,7 @@ if __name__ == '__main__':
     nodes = get_cities(city_file)
     random.shuffle(nodes)
     # Not using all cities cause slow
-    nodes = nodes[:100]
+    nodes = nodes[:15]
 
 
     print("Generating edges...")
@@ -178,10 +177,10 @@ if __name__ == '__main__':
     slowest_ant = (-1, -1, -1)
 
     START_POINT = nodes[0]
-    END_POINT = nodes[23]
+    END_POINT = nodes[4]
     print("Starting the walking...")
     done_ants = []
-    for i in range(1000000):
+    for i in range(100000):
         ant = ANT()
         ant.walk(START_POINT, END_POINT)
         ant.pheromones()
@@ -201,11 +200,12 @@ if __name__ == '__main__':
     print("The fastest ant was ant",fastest_ant[0],"with cost of",fastest_ant[1], "he visited",fastest_ant[2],"edges...")
     print("The slowest ant was ant",slowest_ant[0],"with cost of",slowest_ant[1], "he visited",slowest_ant[2],"edges...")
 
+    print_nodes(nodes)
     done_ants[fastest_ant[0]].gps_stuff()
 
     ant = ANT()
     ant.walk(START_POINT, END_POINT)
-    #for edge in ant.visited_edges:
-        #pass#print(edge,edge.pheromones)
+    for edge in ant.visited_edges:
+        print(edge,edge.pheromones)
 
     print("Main script executed in " + "{0:.2f}".format(time.time() - start_main) + ' seconds...')
